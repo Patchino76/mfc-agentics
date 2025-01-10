@@ -12,7 +12,7 @@ print(load_dotenv())
 def analyze_image_ollama(image_path):
     with open(image_path, "rb") as image_file:
         base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-    prompt = "Analyze this image and describe what you see, including any objects, colors, and any text you can detect."
+    prompt = "Analyse the graph image? Explain in details trends and patterns that you can see like a data analyst."
 
     # Call the Ollama chat function
     response = ollama.chat(
@@ -43,7 +43,7 @@ def analyze_image_groq(image_path):
                 "content": [
                     {
                         "type": "text",
-                        "text": "What is in this image?"
+                        "text": "Analyse the graph image? Explain in details trends and patterns that you can see like a data analyst."
                     },
                     {
                         "type": "image_url",
