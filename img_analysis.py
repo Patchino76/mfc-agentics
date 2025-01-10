@@ -4,20 +4,19 @@ import base64
 from PIL import Image
 from dotenv import load_dotenv
 from groq import Groq
-from langchain_groq import ChatGroq
+# from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
+from rich import print
 
-# Load environment variables from .env file
-print(load_dotenv())
+
+# print(load_dotenv())
 #%%
 
-# llm = ChatGroq(model="llama-3.2-11b-vision-preview", api_key = "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")
 # llm = Groq(api_key=os.getenv("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"))
+# llm = ChatGroq(model="llama-3.2-11b-vision-preview", api_key = "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")
 llm = ChatOllama(model="llama3.2-vision" )
 def analyze_image(image_path):
     """Analyze the image using Llama 3.2-11B Vision model via Groq API."""
-    # Load the image
-    # load_image(image_path)
     
     # Convert the image to base64
     with open(image_path, "rb") as image_file:
@@ -58,6 +57,7 @@ def analyze_image2(image_path):
     
     # Call the LLM to get the analysis result
     result = llm.invoke(prompt)
+    print("finished")
     
     return result
 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     png_file_path = "images/mttr1.jpg"  # Replace with your actual file path
     
     try:
-        result = analyze_image(png_file_path)
+        result = analyze_image2(png_file_path)
         print("Analysis Result:", result)
     except Exception as e:
         print("An error occurred:", e)
