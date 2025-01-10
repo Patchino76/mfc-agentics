@@ -12,7 +12,7 @@ print(load_dotenv())
 def analyze_image_ollama(image_path):
     with open(image_path, "rb") as image_file:
         base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-    prompt = "Analyse the graph image? Explain in details trends and patterns that you can see like a data analyst."
+    prompt = "Analyse the graph image? Explain in details trends, correlations and patterns that you can see like a data analyst."
 
     # Call the Ollama chat function
     response = ollama.chat(
@@ -43,7 +43,7 @@ def analyze_image_groq(image_path):
                 "content": [
                     {
                         "type": "text",
-                        "text": "Analyse the graph image? Explain in details trends and patterns that you can see like a data analyst."
+                        "text": "Analyse the graph image? Explain in details trends, correlations and patterns that you can see like a data analyst."
                     },
                     {
                         "type": "image_url",
@@ -61,10 +61,10 @@ def analyze_image_groq(image_path):
 
 if __name__ == "__main__":
     # Path to your PNG file
-    png_file_path = "images/mttr1.jpg"  # Replace with your actual file path
+    png_file_path = "images/sp2.png"  # Replace with your actual file path
     
     try:
-        result = analyze_image_groq(png_file_path)
+        result = analyze_image_ollama(png_file_path)
         print("Analysis Result:", result)
     except Exception as e:
         print("An error occurred:", e)
