@@ -1,0 +1,19 @@
+generate_code_task:
+  description: >
+    Receive a query and a dataframe description in plain text. 
+    Generate Python code to fulfill the query using the dataframe.
+    Query: {query}
+    Dataframe Description: {dataframe_description}
+  expected_output: >
+    A string containing Python code that addresses the query.
+  agent: analytical_agent
+
+execute_code_task:
+  description: >
+    Receive Python code and a dataframe object, execute the code, 
+    and return the result.
+    Python Code: {code}
+    Dataframe Object: {dataframe}
+  expected_output: >
+    The result of the executed code.
+  agent: code_interpreter_agent
