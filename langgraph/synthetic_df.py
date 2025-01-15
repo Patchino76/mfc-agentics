@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import random
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
 
 def gen_synthetic_df():
     start_date = datetime(2025, 1, 1)
@@ -49,3 +52,26 @@ def gen_synthetic_df():
 # # Filter the dataframe for the specific machine
 # grp2 = group_dataframe_by_machine(df, "Питател 1")
 # print(grp2)
+
+def generate_bar_plot(df):
+    # Group by 'stream_name' and sum 'duration_minutes'
+    total_downtime = df.groupby('stream_name')['duration_minutes'].sum()
+
+    # Plot the result
+    plt.figure(figsize=(10, 6))
+    total_downtime.plot(kind='bar')
+    plt.title('Total Downtime Duration of All Streams')
+    plt.xlabel('Stream Name')
+    plt.ylabel('Duration (minutes)')
+
+    buf = BytesIO() 
+    plt.savefig(buf, format='png') 
+    buf.seek(0) 
+
+    
+    img_b64 = base64.b64encode(buf.getvalue()).decode('utf-8') 
+    return img_b64
+
+df = gen_synthetic_df()
+res = generate_bar_plot(df)
+print(res)
