@@ -42,15 +42,15 @@ def generate_code(state: AnalysisState):
         Return only the Python function as a string and do not try to execute the code. 
         Do not add sample dataframes, function descriptions and do not add calls to the function.
         
-        If you create a plot function, do not use plt.show(), instead return the image in base64 format.
-        For that purpose you can import and  use libraries like base64 and BytesIO.
+        If you create a plot function, do not use plt.show(), instead return the image in base64 format using the base64 and BytesIO libraries.
+        If returning a base64 string do not add 'data:image/png;base64' to it. 
         
         """
             }
         ]
     try:
         # Call the Ollama API to generate Python code
-        response = ollama.chat("llama3.1", messages=prompt)
+        response = ollama.chat("llama3.1:8b", messages=prompt)
         # print("API Response:", response)  # Debugging step to check response structure
         
 
@@ -151,7 +151,9 @@ df = gen_synthetic_df()
 initial_state = {
     'dataframe': df,
     # 'query': "Calc the total downtimes for stream 1 ",  
-    'query': "Generate bar plot the total downtime duration of all streams",
+    # 'query': "Generate bar plot the total downtime duration of all streams",
+    'query': "Дай ми графика на престоите на машините на поток 3 без да ги сортираш.",
+
     'generated_code': '',
     'result': '',
     'logs': []
