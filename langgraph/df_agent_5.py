@@ -16,6 +16,8 @@ import base64
 import os
 import ast
 
+from synthetic_df import gen_synthetic_df
+
 # class AngetAtate(TypedDict):
 #     dataframe: pd.DataFrame
 #     query: str
@@ -68,18 +70,25 @@ def call_model(state):
     response = llm.invoke(messages)
     return {"messages": messages + [response]}
 
-def extract_function_body(code: str, function_name: str) -> str:
-    # Parse the code into an Abstract Syntax Tree (AST)
-    tree = ast.parse(code)
+# def extract_function_body(code: str, function_name: str) -> str:
+#     # Parse the code into an Abstract Syntax Tree (AST)
+#     tree = ast.parse(code)
     
-    # Find the function definition node
+#     # Find the function definition node
+#     for node in ast.walk(tree):
+#         if isinstance(node, ast.FunctionDef) and node.name == function_name:
+#             # Extract the function body
+#             function_body = ast.get_source_segment(code, node)
+#             return function_body
+    
+#     return None
+
+def extract_function_body(code: str, function_name: str) -> str:
+    tree = ast.parse(code)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == function_name:
-            # Extract the function body
-            function_body = ast.get_source_segment(code, node)
-            return function_body
-    
-    return None
+            return ast.get_source_segment(code, node)
+    raise ValueError("Function not found.")
 
 
 def execute_generated_code(state):
@@ -217,16 +226,17 @@ example_df = pd.DataFrame({
     "Age": [25, 30, 35],
     "Score": [90, 85, 88]
 })
+df = gen_synthetic_df()
 
 # user_query = "Calculate the average score for users older than 28."
-user_query = "Compare the Age and Score as bars charts next to each other."
+user_query = "Plot all streams with their durations for the planned downtime category."
 initial_state = {
     "messages": [],
-    "dataframe": example_df,
+    "dataframe": df,
     "query": user_query
 }
 
 result = app.invoke(initial_state)
 
 print("Generated Python Function:")
-print(result["messages"][-1].content)
+# print(result["messages"][-1].content)
