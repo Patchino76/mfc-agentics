@@ -209,7 +209,7 @@ def execute_plot_tool(dataframe_json: str, generated_code: str) -> str:
 tools = [execute_code_tool, execute_plot_tool]
 tool_node = ToolNode(tools)
 
-llm = ChatOllama(model="qwen2.5-coder:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools
+llm = ChatOllama(model="deepseek-r1:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools
 llm_tools = llm.bind_tools(tools)
 
 
