@@ -13,6 +13,7 @@ from io import BytesIO
 import base64
 import os
 import ast
+from langchain_community.tools import BearlyInterpreterTool
 
 from synthetic_df import gen_synthetic_df
 
@@ -22,8 +23,10 @@ class AgentState(TypedDict):
     dataframe: pd.DataFrame
     query: str
 
+llm = ChatOllama(model="granite3.1-dense:8b", temperature=0)
 
-def create_system_message(state: AgentState):
+
+def create_system_message(state):
     query = state["query"]  # Extract query from the state
     sample_df = state["dataframe"].head().to_string()  # Use the head of the DataFrame for structure
     system_prompt = f"""
@@ -57,7 +60,7 @@ def create_system_message(state: AgentState):
 
 def call_model(state):
     messages = state["messages"]  # Ensure system message is included
-    response = llm_tools.invoke(messages)
+    response = llm.invoke(messages)
     return {"messages": messages + [response]}
 
 # def extract_function_body(code: str, function_name: str) -> str:
@@ -85,7 +88,7 @@ def extract_function_body(code: str, function_name: str) -> str:
 def execute_code_tool(dataframe: pd.DataFrame, generated_code: str) -> str:
     """
     Executes dynamically generated Python code on a provided dataframe.
-
+    
     Args:
         dataframe (pd.DataFrame): The input dataframe on which the Python function will operate.
         generated_code (str): The Python code, returned as a string, defining the function to be executed.
@@ -97,23 +100,16 @@ def execute_code_tool(dataframe: pd.DataFrame, generated_code: str) -> str:
         ValueError: If the generated code does not contain a valid function definition or the result 
                     of the function execution is not a valid type.
     """
-    # Extract and execute the function
-    function_match = re.search(r"(def\s+\w+\(.*?\):\n(?:\s+.*\n)*)", generated_code, re.DOTALL)
-    if not function_match:
-        raise ValueError("Error: Could not extract a valid function definition from the generated code.")
-    
-    function_body = function_match.group(1)
-    namespace = {}
-    exec(function_body, namespace)
-    
-    function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
-    result = namespace[function_name](dataframe)
+    interpreter = BearlyInterpreterTool()
+    try:
+        result = interpreter.execute_code(generated_code, dataframe)
+    except Exception as e:
+        raise ValueError(f"Execution error: {e}")
     
     if not isinstance(result, (str, int, float, list)):
         raise ValueError("The result must be a string, number, or list.")
     
     return str(result)
-
 
 @tool
 def execute_plot_tool(dataframe: pd.DataFrame, generated_code: str) -> str:
@@ -130,17 +126,11 @@ def execute_plot_tool(dataframe: pd.DataFrame, generated_code: str) -> str:
     Raises:
         ValueError: If the generated code does not contain a valid function definition or the function execution fails.
     """
-    # Extract and execute the function
-    function_match = re.search(r"(def\s+\w+\(.*?\):\n(?:\s+.*\n)*)", generated_code, re.DOTALL)
-    if not function_match:
-        raise ValueError("Error: Could not extract a valid function definition from the generated code.")
-    
-    function_body = function_match.group(1)
-    namespace = {}
-    exec(function_body, namespace)
-    
-    function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
-    img_base64 = namespace[function_name](dataframe)
+    interpreter = BearlyInterpreterTool()
+    try:
+        img_base64 = interpreter.execute_plot(generated_code, dataframe)
+    except Exception as e:
+        raise ValueError(f"Plot execution error: {e}")
     
     return img_base64
 
@@ -156,50 +146,30 @@ def decide_action(state):
 tools = [execute_code_tool, execute_plot_tool]
 tool_node = ToolNode(tools)
 
-llm = ChatOllama(model="granite3.1-dense:8b", temperature=0)
-llm_tools = llm.bind_tools(tools)
-
-
-def should_continue(state: MessagesState):
-    messages = state["messages"]
-    last_message = messages[-1]
-    if last_message.tool_calls:
-        return "tools"
-    return END
-
 # Add nodes to the graph
 graph = StateGraph(AgentState)
 
 # Add nodes
-# graph.add_node("generate_prompt", create_system_message)
+graph.add_node("generate_prompt", create_system_message)
 graph.add_node("query_model", call_model)
-graph.add_node("tools", tool_node)
 
-#
-graph.set_entry_point("query_model")  # First node in the graph
+# Replace ToolExecutor with ToolNode
+graph.add_node("execute_code", ToolNode(execute_code_tool))
+graph.add_node("execute_plot", ToolNode(execute_plot_tool))
+
+# Add conditional edges for deciding which tool to execute
 graph.add_conditional_edges(
     "query_model",  # Start node
-    should_continue,  # Function to decide which node to go to next
+    decide_action,  # Function to decide which node to go to next
     {
         "execute_code": "execute_code",  # Route to code execution
         "execute_plot": "execute_plot",  # Route to plot execution
     },
-    ["tools", END]
 )
-graph.add_edge("tools", "query_model")
-
-# Add conditional edges for deciding which tool to execute
-# graph.add_conditional_edges(
-#     "query_model",  # Start node
-#     decide_action,  # Function to decide which node to go to next
-#     {
-#         "execute_code": "execute_code",  # Route to code execution
-#         "execute_plot": "execute_plot",  # Route to plot execution
-#     },
-# )
 
 # Set entry and finish points
-# graph.set_finish_point("query_model")     # Use the final logical node as the finish point
+graph.set_entry_point("generate_prompt")  # First node in the graph
+graph.set_finish_point("query_model")     # Use the final logical node as the finish point
 
 # Compile the graph
 app = graph.compile()
@@ -214,7 +184,7 @@ df = gen_synthetic_df()
 user_query = "Calculate the average score for users older than 28."
 # user_query = "Plot all streams with their durations for the planned downtime category."
 initial_state = {
-    "messages": create_system_message(state = AgentState()),
+    "messages": [],
     "dataframe": example_df,
     "query": user_query
 }
