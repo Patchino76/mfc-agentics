@@ -27,7 +27,7 @@ class AgentState(TypedDict):
 
 def create_system_message(state: AgentState):
     query = state["query"]  # Extract query from the state
-    df_json = state["dataframe"]  # JSON string of the DataFrame
+    df_json = state["dataframe_json"]  # JSON string of the DataFrame
     print("DataFrame JSON:", df_json)  # Debugging step to inspect JSON data
 
     # Directly read the JSON string
@@ -42,23 +42,6 @@ def create_system_message(state: AgentState):
         User Query: {query}
         Sample DataFrame used only to infer the structure of the DataFrame:
         {sample_df_head}
-
-        **IMPORTANT**:
-        - Always call the appropriate tool by returning a `function_call`:
-            - Use `execute_code_tool` for Python code that processes data.
-            - Use `execute_plot_tool` for Python code that creates visualizations or plots.
-        - Include the generated Python code in the `arguments` of the `function_call`.
-
-        Return only the `function_call` and ensure it is correctly structured for the tool.
-        In the return result you should include tool_calls, for example:
-        tool_calls: [
-            
-                "name": "execute_code_tool",
-                "args": 
-                    "dataframe_json": state["dataframe"],
-                    "generated_code": generated_code
-
-        ]
         """
     return {"messages": [SystemMessage(content=system_prompt)]}
 
@@ -132,11 +115,11 @@ def execute_code_tool(state: AgentState) -> str:
     
     return json.dumps(result)  # Ensure output is JSON-compatible
 
-.
+
 tools = [execute_code_tool]
 tool_node = ToolNode(tools)
 
-llm = ChatOllama(model="qwen2.5-coder:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools
+llm = ChatOllama(model="deepseek-r1:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
 llm_tools = llm.bind_tools(tools)
 
 
