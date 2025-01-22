@@ -4,6 +4,7 @@ from praisonaiagents import Agent
 from dotenv import load_dotenv
 env = load_dotenv(override=True)
 print(env)
+print(os.getenv("OPENAI_API_KEY"))
 
 config = {
     "vector_store": {
