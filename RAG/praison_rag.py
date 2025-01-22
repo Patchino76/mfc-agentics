@@ -1,11 +1,11 @@
 
 import os
-from praisonaiagents import Agent
 from dotenv import load_dotenv
 env = load_dotenv(override=True)
 print(env)
 print(os.getenv("OPENAI_API_KEY"))
 
+from praisonaiagents import Agent
 config = {
     "vector_store": {
         "provider": "chroma",
@@ -39,7 +39,7 @@ agent = Agent(
     knowledge=["kag-research-paper.pdf"], # Indexing
     knowledge_config=config,
     user_id="user1",
-    llm="deepseek-r1"
+    llm="deepseek-r1:14b"
 )
 
 agent.start("What is KAG in one line?") # Retrieval
