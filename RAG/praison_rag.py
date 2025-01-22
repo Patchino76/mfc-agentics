@@ -36,10 +36,10 @@ config = {
 agent = Agent(
     name="Knowledge Agent",
     instructions="You answer questions based on the provided knowledge.",
-    knowledge=["kag-research-paper.pdf"], # Indexing
+    knowledge=["elia.txt"], # kag-research-paper.pdf
     knowledge_config=config,
     user_id="user1",
     llm="deepseek-r1:14b"
 )
 
-agent.start("What is KAG in one line?") # Retrieval
+agent.start("Отговори на български език върху какво се съсредоточава Елия в работата си?") # Retrieval
