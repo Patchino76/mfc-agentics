@@ -22,7 +22,7 @@ from synthetic_df import gen_synthetic_df
 
 env = load_dotenv(override=True)
 print(env)
-print(os.getenv("GROQ_API_KEY"))
+print(os.getenv("GEMINI_API_KEY"))
 
 
 class AgentState(TypedDict):
