@@ -176,7 +176,16 @@ graph.add_node("call_model", call_model)
 graph.add_node("tools", tool_node)
 
 graph.add_edge(START, "call_model")
-graph.add_conditional_edges("call_model", tools_routing, ["tools", END])
+# graph.add_conditional_edges("call_model", tools_routing, ["tools", END])
+graph.add_conditional_edges(
+    "call_model",
+    tools_routing,
+    {
+        "generate_function_tool": "generate_function_tool",
+        "execute_code_tool": "execute_code_tool",
+        END: END
+    }
+)
 
 graph.set_finish_point("tools")
 app = graph.compile()

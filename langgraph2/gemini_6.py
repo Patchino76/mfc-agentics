@@ -25,9 +25,9 @@ load_dotenv(override=True)
 
 # Configure the Gemini API
 genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
-llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")  
+llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")
 llm_groq = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
-llm_ollama = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b 
+llm_ollama = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
 full_df = gen_synthetic_df()
 
 class AgentState(TypedDict):
@@ -46,7 +46,7 @@ def generate_python_function(state : AgentState):
     them appropriately.
 
     Args:
-        state (AgentState): The state will contain the query string. 
+        state (AgentState): The state will contain the query string.
 
     Returns:
         str: A string containing the generated Python function code. The generated function will:
@@ -74,26 +74,28 @@ def generate_python_function(state : AgentState):
     query = last_message.content
 
     # Prepare the prompt for Gemini
-    func_prompt = f"""You are an expert Python developer and data analyst. Based on the user's query and the provided DataFrame sample, 
-    generate Python function code to perform the requested analysis. 
+    func_prompt = f"""You are an expert Python developer and data analyst. Based on the user's query and the provided DataFrame sample,
+    generate Python function code to perform the requested analysis.
 
     User Query: {query}
     Sample DataFrame used only to infer the structure of the DataFrame:
     {sample_df}
 
-    Provide the Python function as a single string that can be executed using the exec function. 
-    The function should accept a pd.DataFrame object with the same structure as the sample DataFrame as a parameter. 
-    Return only the Python function as a string and do not try to execute the code. 
+    Provide the Python function as a single string that can be executed using the exec function.
+    The function should accept a pd.DataFrame object with the same structure as the sample DataFrame as a parameter.
+    Return only the Python function as a string and do not try to execute the code.
     Do not add sample dataframes, function descriptions and do not add calls to the function.
 
     If you create a plot function, do not use plt.show(), instead return the image in base64 format using the base64 and BytesIO libraries.
     If returning a base64 string do not add 'data:image/png;base64' to it."""
 
     response = llm_gemini.generate_content(func_prompt)
-    print("1 - Generated Python Function:")
+    print("1 - Generated Python Function Response:")
     print(response.text)
     extracted_function = extract_function_code(response.text)
-    return state.update({"generated_code": extracted_function})
+    state["generated_code"] = extracted_function
+    return state # Return the updated state
+
 
 def extract_function_code(generated_code: str) -> str:
 
@@ -101,7 +103,7 @@ def extract_function_code(generated_code: str) -> str:
     function_match = re.search(r"(def\s+\w+\(.*?\):\n(?:\s+.*\n)*)", generated_code, re.DOTALL)
     if not function_match:
         raise ValueError("Error: Could not extract a valid function definition from the generated code.")
-    
+
     function_body = function_match.group(1)
     print("2 - Extracted Function Body:")
     print(function_body)
@@ -113,7 +115,7 @@ def execute_code_tool(state: AgentState) -> str:
     Executes dynamically generated Python code on a provided dataframe.
 
     Args:
-        state (AgentState): The state will contain function body for execution. 
+        state (AgentState): The state will contain function body for execution.
 
     Returns:
         str: The result of executing the function, which must be a string, number, or list.
@@ -126,36 +128,20 @@ def execute_code_tool(state: AgentState) -> str:
     namespace = {}
     exec("import pandas as pd\nimport matplotlib.pyplot as plt\nfrom io import BytesIO\nimport base64\nimport numpy as np\n", namespace)  # Import necessary modules
     exec(function_body, namespace)
-    
+
     function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
     result = namespace[function_name](full_df)
-    
+
     if not isinstance(result, (str, int, float, list)):
         raise ValueError("The result must be a string, number, or list.")
-    
+
     print("Result of code execution:", result)
-    return json.dumps(result) 
+    return json.dumps(result)
 
 
 tools = [execute_code_tool]
 tool_node = ToolNode(tools)
 llm_tools = llm_groq.bind_tools(tools)
-
-# test_message = AIMessage(
-#     content = "",
-#     tool_calls = [
-#         {
-#             "name" : "generate_python_function",
-#             "args" : {
-#                 "query" : "What is the average duration by category?"
-#             },
-#             "id" : "1",
-#             "type" : "tool_call"
-#         }
-#     ],
-# )
-# tool_node.invoke({"messages": [test_message]})
-
 
 
 def call_model(state:AgentState):
@@ -176,23 +162,23 @@ graph.add_node("call_model", call_model)
 graph.add_node("generate_python_function", generate_python_function)
 graph.add_node("tools", tool_node)
 
-graph.add_edge(START, "call_model")
-graph.add_edge("call_model", "generate_python_function")
-graph.add_conditional_edges("generate_python_function", tools_routing, ["tools", END])
+graph.add_edge(START, "generate_python_function")
+# graph.add_edge("call_model", "generate_python_function")
+graph.add_edge("generate_python_function", "call_model")
+graph.add_conditional_edges("call_model", tools_routing, {"tools": "tools", END: END}) # Use dictionary for clarity
 
-
-graph.set_finish_point("tools")
+# graph.set_finish_point(END) # Finish at the end of the graph or after tools
 app = graph.compile()
 
 user_query = "Calculate the average downtime by category. Do not plot anything. Execute the code and provide the result."
 
 initial_state = AgentState(
     messages=[
-        SystemMessage(content="""You are a helpful AI assistant that helps users analyze data using Python. 
-        When given a query about data analysis, you will help generate and execute Python code to answer the query.
-        Always use the provided tools to accomplish the task."""),
-        AIMessage(content="I understand you want to analyze data. I'll help you generate and execute Python code to answer your query."),
-        HumanMessage(content=user_query)
+        SystemMessage(content=""" You will recieve a generated code for a python function
+        function and you have to choose the appropriate tool for execution of the code.
+        Do not write your own generated_code, just use the generated_code provided by
+        the current state and pass it to the appropriate tool for execution."""),
+       HumanMessage(content=user_query)
     ],
     # query=user_query,
     generated_code=None,
