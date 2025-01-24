@@ -126,7 +126,8 @@ tools = [execute_code_tool]
 tool_node = ToolNode(tools)
 
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
+# llm = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-thinking-exp-01-21", api_key = os.getenv("GEMINI_API_KEY"))
 # llm = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b 
 llm_tools = llm.bind_tools(tools)
 
