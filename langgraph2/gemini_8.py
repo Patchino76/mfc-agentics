@@ -27,7 +27,7 @@ load_dotenv(override=True)
 genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
 llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")
 llm_groq = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
-llm_ollama = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
+llm_ollama = ChatOllama(model="deepseek-r1-tool-calling:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
 full_df = gen_synthetic_df()
 
 class AgentState(TypedDict):
@@ -42,33 +42,34 @@ def generate_python_function(state : AgentState):
     Generate Python function code based on a natural language query about a DataFrame.
     """
     sample_df = full_df.head().to_string()
-    # query = state["query"]
     messages = state["messages"]
     last_message = messages[-1]
     query = last_message.content
 
-    # Prepare the prompt for Gemini
-    func_prompt = f"""You are an expert Python developer and data analyst. Based on the user's query and the provided DataFrame sample,
-    generate Python function code to perform the requested analysis.
+    system_prompt = """You are an expert Python developer and data analyst. Your task is to generate Python function code based on user queries about DataFrame analysis.
+    You must provide ONLY the Python function code without any explanations, descriptions, or example calls.
+    If creating plots, do not use plt.show(), instead return the image in base64 format using base64 and BytesIO libraries.
+    If returning a base64 string do not add 'data:image/png;base64' to it.
+    The function should accept a pd.DataFrame parameter with the same structure as the sample DataFrame provided."""
 
-    User Query: {query}
-    Sample DataFrame used only to infer the structure of the DataFrame:
-    {sample_df}
+    user_prompt = f"""Generate a Python function for the following query:
+    
+    Query: {query}
+    
+    Sample DataFrame (used only to infer structure):
+    {sample_df}"""
 
-    Provide the Python function as a single string that can be executed using the exec function.
-    The function should accept a pd.DataFrame object with the same structure as the sample DataFrame as a parameter.
-    Return only the Python function as a string and do not try to execute the code.
-    Do not add sample dataframes, function descriptions and do not add calls to the function.
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
 
-    If you create a plot function, do not use plt.show(), instead return the image in base64 format using the base64 and BytesIO libraries.
-    If returning a base64 string do not add 'data:image/png;base64' to it."""
-
-    response = llm_gemini.generate_content(func_prompt)
+    response = llm_ollama.invoke(messages)
     print("1 - Generated Python Function Response:")
-    print(response.text)
-    extracted_function = extract_function_code(response.text)
+    print(response.content)
+    extracted_function = extract_function_code(response.content)
     state["generated_code"] = extracted_function
-    return state # Return the updated state
+    return state
 
 
 def extract_function_code(generated_code: str) -> str:
@@ -110,22 +111,19 @@ def execute_code_tool(generated_code: str) -> str:
     #     raise ValueError("The result must be a string, number, or list.")
 
     print("Result of code execution:", result)
-    result_json = json.dumps(result)
-    return result_json
+    return json.dumps(result)
 
 
 tools = [execute_code_tool]
 tool_node = ToolNode(tools)
-llm_tools = llm_groq.bind_tools(tools)
+llm_tools = llm_ollama.bind_tools(tools)
 
 
-# def call_model(state:AgentState):
-#     messages = state["messages"]  # Ensure system message is included
-#     response = llm_tools.invoke(messages)
-#     print("Agent Response:", response)
-#     return {"messages": messages + [response]}
 def call_model(state:AgentState):
-    return {"messages" : [llm_tools.invoke(state["messages"])]}
+    messages = state["messages"]  # Ensure system message is included
+    response = llm_tools.invoke(messages)
+    print("Agent Response:", response)
+    return {"messages": messages + [response]}
 
 # def tools_routing(state: AgentState):
 #     messages = state["messages"]
@@ -167,7 +165,7 @@ graph.add_conditional_edges("call_model", tools_routing, {"tools": "tools", END:
 # graph.set_finish_point(END) # Finish at the end of the graph or after tools
 app = graph.compile()
 
-user_query = "Можем ли да открием корелации между престоите в отделните потоци? Do not plot anything."
+user_query = "Справка за престоите на поток 1 и поток 2 по категории. Do not plot anything."
 
 initial_state = AgentState(
     messages=[
