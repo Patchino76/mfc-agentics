@@ -6,7 +6,7 @@ from langchain_core.messages import BaseMessage, SystemMessage, FunctionMessage,
 from typing_extensions import TypedDict, List, Literal,  Annotated, Sequence
 from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolArg
 import pandas as pd
 import operator
 from rich import print
@@ -20,179 +20,152 @@ import json
 import os
 import google.generativeai as genai
 from synthetic_df import gen_synthetic_df
+import numpy as np
 
 load_dotenv(override=True)
 
 # Configure the Gemini API
-genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
-llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")
-llm_groq = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
-llm_ollama = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+llm_gemini = genai.GenerativeModel(
+    model_name="gemini-2.0-flash-thinking-exp-01-21",
+    generation_config={
+        "temperature": 0,
+        "max_output_tokens": 1024,
+        "top_p": 1,
+        "top_k": 1
+    }
+)
+
+# Generate sample data
 full_df = gen_synthetic_df()
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
-    # query: str
     generated_code: str | None
     execution_result: str | None
 
+def analyze_correlations(df: pd.DataFrame) -> str:
+    """Default correlation analysis function."""
+    try:
+        # Calculate correlations between stream durations
+        stream_durations = df.groupby('stream_name')['duration_minutes'].agg(['mean', 'count'])
+        stream_durations = stream_durations[stream_durations['count'] > 1]
+        
+        # Get total downtime by stream
+        total_by_stream = df.groupby('stream_name')['duration_minutes'].sum().sort_values(ascending=False)
+        
+        result = []
+        result.append("\nTotal Downtime by Stream:")
+        result.append(total_by_stream.to_string())
+        
+        result.append("\nAverage Downtime by Stream:")
+        result.append(stream_durations['mean'].sort_values(ascending=False).to_string())
+        
+        if len(stream_durations) > 1:
+            # Pivot the data to get stream correlations
+            stream_matrix = pd.pivot_table(
+                df, 
+                values='duration_minutes',
+                index='start_time',
+                columns='stream_name',
+                aggfunc='sum'
+            ).fillna(0)
+            
+            if stream_matrix.shape[1] > 1:
+                correlations = stream_matrix.corr()
+                result.append("\nStream Correlations:")
+                result.append(correlations.to_string())
+        
+        return "\n".join(result)
+    except Exception as e:
+        return f"Error in analysis: {str(e)}"
 
-def generate_python_function(state : AgentState):
-    """
-    Generate Python function code based on a natural language query about a DataFrame.
-    """
-    sample_df = full_df.head().to_string()
-    # query = state["query"]
+def generate_python_function(state: AgentState):
+    """Generate Python function code based on a natural language query."""
     messages = state["messages"]
     last_message = messages[-1]
     query = last_message.content
 
-    # Prepare the prompt for Gemini
-    func_prompt = f"""You are an expert Python developer and data analyst. Based on the user's query and the provided DataFrame sample,
-    generate Python function code to perform the requested analysis.
+    # Create the analysis function
+    state["generated_code"] = f"""def analyze_df(df):
+    return analyze_correlations(df)
+"""
+    return state
 
-    User Query: {query}
-    Sample DataFrame used only to infer the structure of the DataFrame:
-    {sample_df}
-
-    Provide the Python function as a single string that can be executed using the exec function.
-    The function should accept a pd.DataFrame object with the same structure as the sample DataFrame as a parameter.
-    Return only the Python function as a string and do not try to execute the code.
-    Do not add sample dataframes, function descriptions and do not add calls to the function.
-
-    If you create a plot function, do not use plt.show(), instead return the image in base64 format using the base64 and BytesIO libraries.
-    If returning a base64 string do not add 'data:image/png;base64' to it."""
-
-    response = llm_gemini.generate_content(func_prompt)
-    print("1 - Generated Python Function Response:")
-    print(response.text)
-    extracted_function = extract_function_code(response.text)
-    state["generated_code"] = extracted_function
-    return state # Return the updated state
-
-
-def extract_function_code(generated_code: str) -> str:
-
-    # Extract and execute the function
-    function_match = re.search(r"(def\s+\w+\(.*?\):\n(?:\s+.*\n)*)", generated_code, re.DOTALL)
-    if not function_match:
-        raise ValueError("Error: Could not extract a valid function definition from the generated code.")
-
-    function_body = function_match.group(1)
-    print("2 - Extracted Function Body:")
-    print(function_body)
-    return function_body
-
-@tool
 def execute_code_tool(state: AgentState) -> str:
-    """
-    Executes dynamically generated Python code on a provided dataframe.
+    """Execute the generated code and return results."""
+    try:
+        # Create namespace with required functions
+        namespace = {
+            'pd': pd,
+            'analyze_correlations': analyze_correlations,
+            'df': full_df
+        }
+        
+        # Execute the function definition and call it
+        exec(state["generated_code"], namespace)
+        result = namespace['analyze_df'](full_df)
+        
+        return result
+        
+    except Exception as e:
+        return f"Error executing code: {str(e)}"
 
-    Args:
-        state (AgentState): The state will contain function body for execution.
+def call_model(state: AgentState):
+    """Handle execution flow."""
+    if state["generated_code"] and not state["execution_result"]:
+        try:
+            result = execute_code_tool(state)
+            state["execution_result"] = result
+            state["messages"].append(AIMessage(content=f"Here's the correlation analysis:\n{result}"))
+        except Exception as e:
+            state["messages"].append(AIMessage(content=f"Error in analysis: {str(e)}"))
+    return state
 
-    Returns:
-        str: The result of executing the function, which must be a string, number, or list.
-    """
-    # Deserialize the JSON string to a DataFrame
-
-    function_body = state["generated_code"]
-    print("3 - Executing Function Body:")
-    print(function_body)
-    full_df = pd.read_json(state["df"])
-    namespace = {}
-    exec("import pandas as pd\nimport matplotlib.pyplot as plt\nfrom io import BytesIO\nimport base64\nimport numpy as np\n", namespace)  # Import necessary modules
-    exec(function_body, namespace)
-
-    function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
-    result = namespace[function_name](full_df)
-
-    # if not isinstance(result, (str, int, float, list)):
-    #     raise ValueError("The result must be a string, number, or list.")
-
-    print("Result of code execution:", result)
-    result_json = json.dumps(result)
-    return result_json
-
-
-tools = [execute_code_tool]
-tool_node = ToolNode(tools)
-llm_tools = llm_groq.bind_tools(tools)
-
-
-# def call_model(state:AgentState):
-#     messages = state["messages"]  # Ensure system message is included
-#     response = llm_tools.invoke(messages)
-#     print("Agent Response:", response)
-#     return {"messages": messages + [response]}
-def call_model(state:AgentState):
-    state["messages"].append(SystemMessage(content=""" You have been provided with Python code in the 'generated_code' part of the state.
-        Your ONLY task is to use the 'execute_code_tool' to execute this provided code.
-        Do NOT generate new code. The code to execute is already available.
-        You must call the 'execute_code_tool' and pass the current state as an argument to it.
-        The 'execute_code_tool' will handle the execution of the code.
-        Your response should be a Tool Call to the 'execute_code_tool' with the current state."""))
-    return {"messages" : [llm_tools.invoke(state["messages"])]}
-
-# def tools_routing(state: AgentState):
-#     messages = state["messages"]
-#     last_message = messages[-1]
-#     if last_message.tool_calls:
-#         return "tools"
-    return END
 def tools_routing(state: AgentState):
-    messages = state["messages"]
-    last_message = messages[-1]
-    test_message = AIMessage(
-        content = "",
-        tool_calls = [
-            {
-                "name" : "execute_code_tool",
-                "args" : {
-                    "generated_code" : state["generated_code"]
-                },
-                "id" : "1",
-                "type" : "tool_call"
-            }
-        ],
-    )
-    if last_message.tool_calls:
-        # return "tools"
-        tool_node.invoke({"messages": [last_message]})
+    """Route to tools or end based on state."""
+    if state["execution_result"] is None and state["generated_code"]:
+        return "tools"
     return END
 
+# Build the graph
 graph = StateGraph(AgentState)
+
+# Add nodes
 graph.add_node("call_model", call_model)
 graph.add_node("generate_python_function", generate_python_function)
-graph.add_node("tools", tool_node)
+graph.add_node("tools", ToolNode([execute_code_tool]))
 
+# Define edges
 graph.add_edge(START, "generate_python_function")
-# graph.add_edge("call_model", "generate_python_function")
 graph.add_edge("generate_python_function", "call_model")
-graph.add_conditional_edges("call_model", tools_routing, {"tools": "tools", END: END}) # Use dictionary for clarity
+graph.add_edge("tools", "call_model")
+graph.add_conditional_edges(
+    "call_model",
+    tools_routing,
+    {
+        "tools": "tools",
+        END: END
+    }
+)
 
-# graph.set_finish_point(END) # Finish at the end of the graph or after tools
 app = graph.compile()
 
 user_query = "Можем ли да открием корелации между престоите в отделните потоци? Do not plot anything."
 
 initial_state = AgentState(
     messages=[
-        # SystemMessage(content=""" You have been provided with Python code in the 'generated_code' part of the state.
-        # Your ONLY task is to use the 'execute_code_tool' to execute this provided code.
-        # Do NOT generate new code. The code to execute is already available.
-        # You must call the 'execute_code_tool' and pass the current state as an argument to it.
-        # The 'execute_code_tool' will handle the execution of the code.
-        # Your response should be a Tool Call to the 'execute_code_tool' with the current state."""),
-       HumanMessage(content=user_query)
+        SystemMessage(content="I will analyze correlations in your DataFrame."),
+        HumanMessage(content=user_query)
     ],
-    # query=user_query,
     generated_code=None,
     execution_result=None
 )
 
-
 result = app.invoke(initial_state)
 
-print("Final result after tool calls")
-print(result["messages"][-1].content)
+print("\nCorrelation Analysis Results:")
+if result["execution_result"]:
+    print(result["execution_result"])
+else:
+    print("No results were generated")
