@@ -27,7 +27,7 @@ load_dotenv(override=True)
 genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
 llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")
 llm_groq = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
-llm_ollama = ChatOllama(model="deepseek-r1-tool-calling:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
+llm_ollama = ChatOllama(model="MFDoom/deepseek-r1-tool-calling:14b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
 full_df = gen_synthetic_df()
 
 class AgentState(TypedDict):
@@ -37,7 +37,7 @@ class AgentState(TypedDict):
     execution_result: str | None
 
 
-def generate_python_function(state : AgentState):
+def generate_python_function(state : AgentState): # OLLAMA LLM FUNCTION
     """
     Generate Python function code based on a natural language query about a DataFrame.
     """
@@ -70,7 +70,38 @@ def generate_python_function(state : AgentState):
     extracted_function = extract_function_code(response.content)
     state["generated_code"] = extracted_function
     return state
+# def generate_python_function(state : AgentState):
+#     """
+#     Generate Python function code based on a natural language query about a DataFrame.
+#     """
+#     sample_df = full_df.head().to_string()
+#     # query = state["query"]
+#     messages = state["messages"]
+#     last_message = messages[-1]
+#     query = last_message.content
 
+#     # Prepare the prompt for Gemini
+#     func_prompt = f"""You are an expert Python developer and data analyst. Based on the user's query and the provided DataFrame sample,
+#     generate Python function code to perform the requested analysis.
+
+#     User Query: {query}
+#     Sample DataFrame used only to infer the structure of the DataFrame:
+#     {sample_df}
+
+#     Provide the Python function as a single string that can be executed using the exec function.
+#     The function should accept a pd.DataFrame object with the same structure as the sample DataFrame as a parameter.
+#     Return only the Python function as a string and do not try to execute the code.
+#     Do not add sample dataframes, function descriptions and do not add calls to the function.
+
+#     If you create a plot function, do not use plt.show(), instead return the image in base64 format using the base64 and BytesIO libraries.
+#     If returning a base64 string do not add 'data:image/png;base64' to it."""
+
+#     response = llm_gemini.generate_content(func_prompt)
+#     print("1 - Generated Python Function Response:")
+#     print(response.text)
+#     extracted_function = extract_function_code(response.text)
+#     state["generated_code"] = extracted_function
+#     return state # Return the updated state
 
 def extract_function_code(generated_code: str) -> str:
 
