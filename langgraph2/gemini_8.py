@@ -161,7 +161,7 @@ def call_model(state:AgentState):
 #     last_message = messages[-1]
 #     if last_message.tool_calls:
 #         return "tools"
-    return END
+    # return END
 def tools_routing(state: AgentState):
     messages = state["messages"]
     last_message = messages[-1]
