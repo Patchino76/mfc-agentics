@@ -20,6 +20,7 @@ import ast
 import json
 import os
 import google.generativeai as genai
+from langgraph.prebuilt import InjectedState
 from synthetic_df import gen_synthetic_df
 
 load_dotenv(override=True)
@@ -44,8 +45,10 @@ def gen_code(state: InputState) -> InputState:
     return state
 
 @tool
-def execute_code(code: str) -> str:
+def execute_code(state: Annotated[dict, InjectedState]) -> str:
     """Execute the given code"""
+
+    code = state["generated_code"]
     exec(code)
     return "Code executed successfully"
 
@@ -61,24 +64,22 @@ tools = [execute_code]
 tool_node = ToolNode(tools)
 llm_tools = llm_groq.bind_tools(tools)
 
-def router(state: InputState) -> Literal["execute", "end"]:
+
+def router(state: InputState) -> Literal["tools", "end"]:
     print("we are in the router...")
     print(state)
     if state["generated_code"]:
-        return "execute"
+        return "tools"
     return "end"
 
-def execute(state: InputState) -> InputState:
-    if state["generated_code"]:
-        execute_code(state["generated_code"])
-    return state
+
 
 # %%
 graph = StateGraph(InputState)
 
 # Add nodes
 graph.add_node("gen_code", gen_code)
-graph.add_node("execute", execute)
+graph.add_node("tools", tool_node)
 graph.add_node("call_model", call_model)
 
 # Add edges
@@ -88,11 +89,11 @@ graph.add_conditional_edges(
     "call_model",
     router,
     {
-        "execute": "execute",
+        "tools": "tools",
         "end": END
     }
 )
-graph.add_edge("execute", END)
+graph.add_edge("tools", END)
 
 app = graph.compile()
 app

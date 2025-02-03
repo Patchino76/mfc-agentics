@@ -6,7 +6,8 @@ from langchain_core.messages import BaseMessage, SystemMessage, FunctionMessage,
 from typing_extensions import TypedDict, List, Literal,  Annotated, Sequence
 from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
-from langchain_core.tools import tool, InjectedToolArg
+from langgraph.prebuilt import InjectedState
+from langchain_core.tools import tool
 import pandas as pd
 import operator
 from rich import print
@@ -66,7 +67,7 @@ def generate_python_function(state : AgentState):
     print("1 - Generated Python Function Response:")
     print(response.text)
     extracted_function = extract_function_code(response.text)
-    state["generated_code"].append(extracted_function)
+    state["generated_code"] = extracted_function
     return state # Return the updated state
 
 
@@ -83,19 +84,16 @@ def extract_function_code(generated_code: str) -> str:
     return function_body
 
 @tool
-def execute_code_tool(state : AgentState) -> str:
+def execute_code_tool(generated_code: Annotated[str, InjectedState("generated_code")]) -> str:
     """
     Executes dynamically generated Python code on a provided dataframe.
-
-    Args:
-       state (AgentState): The state will contain function body for execution.
 
     Returns:
         str: The result of executing the function, which must be a string, number, or list.
     """
     # Deserialize the JSON string to a DataFrame
 
-    function_body = state["generated_code"]
+    function_body = generated_code
     print("3 - Executing Function Body:")
     print(function_body)
     namespace = {}
@@ -105,11 +103,8 @@ def execute_code_tool(state : AgentState) -> str:
     function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
     result = namespace[function_name](full_df)
 
-    # if not isinstance(result, (str, int, float, list)):
-    #     raise ValueError("The result must be a string, number, or list.")
-
     print("Result of code execution:", result)
-    return json.dumps(result)
+    return result #son.dumps(result)
 
 
 tools = [execute_code_tool]
@@ -127,26 +122,8 @@ def call_model(state:AgentState):
 def router(state: AgentState):
     messages = state["messages"]
     last_message = messages[-1]
-    # test_message = AIMessage(
-    #     content = "",
-    #     tool_calls = [
-    #         {
-    #             "name" : "execute_code_tool",
-    #             "args" : {
-    #                 "generated_code" : state["generated_code"]
-    #             },
-    #             "id" : "1",
-    #             "type" : "tool_call"
-    #         }
-    #     ],
-    # )
-    if last_message.tool_calls:
-        tool_call = last_message.tool_calls[0]
-        tool_call["args"]["generated_code"] = state["generated_code"][-1] 
-        modified_message = last_message.model_copy() 
-        modified_message.tool_calls = [tool_call]
 
-        tool_node.invoke({"messages": [modified_message]})
+    if last_message.tool_calls:
         return "tools"
     return END
 
