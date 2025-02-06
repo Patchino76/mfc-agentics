@@ -22,7 +22,7 @@ import os
 import google.generativeai as genai
 from synthetic_df import gen_synthetic_df
 
-load_dotenv(override=True)
+load_dotenv(override=True)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 
 # Configure the Gemini API
 genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
