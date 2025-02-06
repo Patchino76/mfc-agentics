@@ -5,32 +5,41 @@ from rich import print
 import os
 
 #%%
-def load_dispatchers_data(file_path) -> pd.DataFrame:
-    # Get the directory where this script is located
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct absolute path to the CSV file
-    absolute_path = os.path.join(current_dir, file_path)
-    
-    # Load the CSV file without using the first column as index
-    df = pd.read_csv(absolute_path, index_col=False)
+def load_dispatchers_data(file_path = "c:/projects/mfc-agentics/langgraph4/data/dispatchers_en_22.csv") -> pd.DataFrame:
+
+    df = pd.read_csv(file_path, index_col=False)
     
     # Drop the 'Unnamed: 0' column if it exists
     if 'Unnamed: 0' in df.columns:
         df.drop(columns=['Unnamed: 0'], inplace=True)
     
     # Create a timestamp index with 8-hour frequency
-    start_time = pd.Timestamp.now()
+    start_time = pd.Timestamp('2022-01-01 00:00:00')
     df.index = pd.date_range(start=start_time, periods=len(df), freq='8h')
+    
+    # Add shift column based on time of day
+    # Shift 1: 00:00-07:59, Shift 2: 08:00-15:59, Shift 3: 16:00-23:59
+    df['Shift'] = pd.cut(df.index.hour, 
+                        bins=[-1, 7, 15, 23], 
+                        labels=[1, 2, 3],
+                        include_lowest=True)
+    
+    # Move Shift column to the front
+    cols = ['Shift'] + [col for col in df.columns if col != 'Shift']
+    df = df[cols]
     
     return df
 
+df = load_dispatchers_data()
+print(df.head(10))
 
 
 # %%
 def create_data_prompt():
-    df = load_dispatchers_data('dispatchers_en_22.csv')
+    df = load_dispatchers_data()
 
     column_descriptions = {
+        'Shift' : 'Смяна',
         # Ore input and statuses:
         'DailyOreInput': 'Подадена руда от МГТЛ за денонощието',
         'Stock2Status': 'Състояние на склад №2',
@@ -66,7 +75,7 @@ def create_data_prompt():
         'ConcentrateMoisture': 'Влага на медния концентрат',
         'CopperContent': 'Съдържание на мед в медния к-т',
         'MetalCopper': 'Метал мед в медния концентрат',
-        'ThickenerWeight': 'Литрово тегло в сгъстителя'
+        'ThickenerWeight': 'Литрово тегло в сгъстителя',
         }
 
 
