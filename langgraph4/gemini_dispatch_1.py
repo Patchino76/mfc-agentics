@@ -22,7 +22,7 @@ import ast
 import json
 import os
 import google.generativeai as genai
-from synthetic_df import gen_synthetic_df
+from data.dispatchers_data import create_data_prompt, load_dispatchers_data
 
 load_dotenv(override=True)
 
@@ -31,7 +31,7 @@ genai.configure(api_key="AIzaSyD-S0ajn_qCyVolBLg0mQ83j0ENoqznMX0")
 llm_gemini = genai.GenerativeModel(model_name="gemini-2.0-flash-thinking-exp-01-21")
 llm_groq = ChatGroq(model="llama-3.3-70b-versatile", api_key = "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")
 llm_ollama = ChatOllama(model="granite3.1-dense:8b", temperature=0) #llama3.1:latest granite3.1-dense:8b qwen2.5-coder:14b  jacob-ebey/phi4-tools deepseek-r1:14b
-full_df = gen_synthetic_df()
+full_df = load_dispatchers_data("dispatchers_en_22.csv")
 
 class AgentState(TypedDict):
     messages: Sequence[BaseMessage]
@@ -40,11 +40,13 @@ class AgentState(TypedDict):
     exec_result: Optional[Any] = None
 
 
+
+
 def generate_python_function(state : AgentState):
     """
     Generate Python function code based on a natural language query about a DataFrame.
     """
-    sample_df = full_df.head().to_string()
+    sample_df = create_data_prompt()
     query = state["query"]
     # messages = state["messages"]
     # last_message = messages[-1]
@@ -100,15 +102,16 @@ def execute_code_tool(generated_code: Annotated[str, InjectedState("generated_co
     print("3 - Executing Function Body:")
     print(function_body)
     namespace = {}
-    exec("""
-        import pandas as pd
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        from io import BytesIO, StringIO
-        import base64
-        import numpy as np
-        import io
-    """.strip(), namespace)
+    # exec("""
+    #     import pandas as pd
+    #     import matplotlib.pyplot as plt
+    #     import seaborn as sns
+    #     from io import BytesIO, StringIO
+    #     import base64
+    #     import numpy as np
+    #     import io
+    # """.strip(), namespace)
+    exec("import pandas as pd\nimport matplotlib.pyplot as plt\nfrom io import BytesIO\nimport base64\nimport numpy as np\nimport io\n", namespace)
     exec(function_body, namespace)
 
     function_name = re.search(r"def\s+(\w+)\(", function_body).group(1)
@@ -159,7 +162,7 @@ graph.add_conditional_edges("call_model", router, {"tools": "tools", END: END}) 
 # graph.set_finish_point(END) # Finish at the end of the graph or after tools
 app = graph.compile()
 
-user_query = "Справка за престоите на поток 1 и поток 2 по категории. Do not plot anything."
+user_query = "Таблица на корелациите за всички параметри. Използвай българските описания."
 
 initial_state = AgentState(
     messages=[(SystemMessage(content=""" You have been provided with Python code in the 'generated_code' part of the state.
